@@ -1,0 +1,283 @@
+<html>
+
+<head>
+  <title>Express</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.ethers.io/lib/ethers-5.0.umd.min.js"
+          type="application/javascript"></script>
+</head>
+
+<body>
+  <script>
+    let contract = null;
+    let provider = null;
+
+    function log(text) {
+      const span = document.createElement('span');
+      span.innerText = text;
+      document.getElementsByTagName('body')[0].appendChild(span);
+      document.getElementsByTagName('body')[0].appendChild(document.createElement('br'));
+    }
+
+    function getNetworkDisplayName(chainId) {
+      let networkId;
+      try {
+        networkId = parseInt(chainId);
+      } catch {}
+      if (networkId === 1) {
+        return 'Ethereum Main Network (MainNet)';
+      }
+      if (networkId === 3) {
+        return 'Ropsten Test Network';
+      }
+      if (networkId === 4) {
+        return 'Rinkeby Test Network';
+      }
+      if (networkId === 5) {
+        return 'Goerli Test Network';
+      }
+      if (networkId === 42) {
+        return 'Kovan Test Network';
+      }
+      if (networkId === 56) {
+        return 'Binance Smart Chain MainNet';
+      }
+      return 'Unknown Network';
+    }
+
+    const erc20Abi = [
+      {
+        constant: true,
+        inputs: [],
+        name: 'name',
+        outputs: [{ name: '', type: 'string' }],
+        payable: false,
+        stateMutability: 'view',
+        type: 'function',
+      },
+      {
+        constant: false,
+        inputs: [
+          { name: '_spender', type: 'address' },
+          { name: '_value', type: 'uint256' },
+        ],
+        name: 'approve',
+        outputs: [{ name: '', type: 'bool' }],
+        payable: false,
+        stateMutability: 'nonpayable',
+        type: 'function',
+      },
+      {
+        constant: true,
+        inputs: [],
+        name: 'totalSupply',
+        outputs: [{ name: '', type: 'uint256' }],
+        payable: false,
+        stateMutability: 'view',
+        type: 'function',
+      },
+      {
+        constant: false,
+        inputs: [
+          { name: '_from', type: 'address' },
+          { name: '_to', type: 'address' },
+          { name: '_value', type: 'uint256' },
+        ],
+        name: 'transferFrom',
+        outputs: [{ name: '', type: 'bool' }],
+        payable: false,
+        stateMutability: 'nonpayable',
+        type: 'function',
+      },
+      {
+        constant: true,
+        inputs: [],
+        name: 'decimals',
+        outputs: [{ name: '', type: 'uint8' }],
+        payable: false,
+        stateMutability: 'view',
+        type: 'function',
+      },
+      {
+        constant: true,
+        inputs: [{ name: '_owner', type: 'address' }],
+        name: 'balanceOf',
+        outputs: [{ name: 'balance', type: 'uint256' }],
+        payable: false,
+        stateMutability: 'view',
+        type: 'function',
+      },
+      {
+        constant: true,
+        inputs: [],
+        name: 'symbol',
+        outputs: [{ name: '', type: 'string' }],
+        payable: false,
+        stateMutability: 'view',
+        type: 'function',
+      },
+      {
+        constant: false,
+        inputs: [
+          { name: '_to', type: 'address' },
+          { name: '_value', type: 'uint256' },
+        ],
+        name: 'transfer',
+        outputs: [{ name: '', type: 'bool' }],
+        payable: false,
+        stateMutability: 'nonpayable',
+        type: 'function',
+      },
+      {
+        constant: true,
+        inputs: [
+          { name: '_owner', type: 'address' },
+          { name: '_spender', type: 'address' },
+        ],
+        name: 'allowance',
+        outputs: [{ name: '', type: 'uint256' }],
+        payable: false,
+        stateMutability: 'view',
+        type: 'function',
+      },
+      { payable: true, stateMutability: 'payable', type: 'fallback' },
+      {
+        anonymous: false,
+        inputs: [
+          { indexed: true, name: 'owner', type: 'address' },
+          { indexed: true, name: 'spender', type: 'address' },
+          { indexed: false, name: 'value', type: 'uint256' },
+        ],
+        name: 'Approval',
+        type: 'event',
+      },
+      {
+        anonymous: false,
+        inputs: [
+          { indexed: true, name: 'from', type: 'address' },
+          { indexed: true, name: 'to', type: 'address' },
+          { indexed: false, name: 'value', type: 'uint256' },
+        ],
+        name: 'Transfer',
+        type: 'event',
+      },
+    ];
+
+    const contractAbi = [
+      {
+        "anonymous": false,
+        "inputs": [
+          {
+            "indexed": false,
+            "internalType": "address",
+            "name": "sender",
+            "type": "address"
+          },
+          {
+            "indexed": false,
+            "internalType": "address",
+            "name": "asset",
+            "type": "address"
+          },
+          {
+            "indexed": false,
+            "internalType": "uint256",
+            "name": "amount",
+            "type": "uint256"
+          }
+        ],
+        "name": "Bet",
+        "type": "event"
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "address",
+            "name": "asset",
+            "type": "address"
+          },
+          {
+            "internalType": "uint256",
+            "name": "amount",
+            "type": "uint256"
+          }
+        ],
+        "name": "bet",
+        "outputs": [],
+        "stateMutability": "payable",
+        "type": "function"
+      }
+    ];
+
+    if (typeof window.ethereum !== 'undefined') {
+      if (ethereum.isMetaMask) {
+        document.writeln('MetaMask is installed!<br>');
+      } else {
+        document.writeln('Ethereum provider is not MetaMask!');
+        throw new Error('Ethereum provider is not MetaMask!');
+      }
+      provider = new ethers.providers.Web3Provider(ethereum);
+      provider.listAccounts().then((accounts) => {
+        if (accounts.length === 0) {
+          ethereum
+                  .request({ method: 'eth_requestAccounts' })
+                  .then(() => location.reload())
+                  .catch((e) => {
+                    document.writeln(
+                            'Error while receiving accounts from metamask:\n',
+                            JSON.stringify(e.message)
+                    );
+                    console.error(e);
+                  });
+        } else {
+          log(`Using account ${accounts[0]} on ${getNetworkDisplayName(ethereum.chainId)}`);
+          const signer = provider.getUncheckedSigner(accounts[0]);
+          contract = new ethers.Contract(
+                  '0xc6a4fa0df6e71e9e87dc8978f7cab31080aa473e',
+                  contractAbi,
+                  signer
+          );
+          const prosToken = '0xed8c8aa8299c10f067496bb66f8cc7fb338a3405';
+          const erc20Contract = new ethers.Contract(
+                  prosToken,
+                  erc20Abi,
+                  signer
+          );
+          const amount = ethers.utils.parseEther('0.001');
+          erc20Contract.approve(contract.address, amount)
+          .then((approveTx) => {
+            log(`Waiting for approve ${approveTx.hash} transaction to finish...`);
+            approveTx.wait()
+                    .then(() => {
+                      log("Token transfer approved. Calling bet()");
+                      contract.bet(prosToken, amount).then((betTx) => {
+                        log(`Waiting for bet ${betTx.hash} transaction to finish...`);
+                        betTx.wait()
+                                .then(() => log('Success'))
+                                .catch((e) => {
+                                  log("An exception occurred. Check console.");
+                                  console.error(e);
+                                });
+                      })
+                      .catch((e) => {
+                        log(`Operation cancelled. ${JSON.stringify(e, null, 2)}`);
+                      })
+                    })
+                    .catch((e) => {
+                      log("An exception occurred. Check console.");
+                      console.error(e);
+                    });
+          })
+          .catch((e) => {
+            log(`Operation cancelled. ${JSON.stringify(e, null, 2)}`);
+          });
+        }
+      });
+    } else {
+      document.writeln('MetaMask is not installed!');
+      throw new Error('MetaMask is not installed!');
+    }
+    </script>
+</body>
+
+</html>
